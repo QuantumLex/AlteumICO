@@ -8,7 +8,7 @@ pragma solidity ^0.4.18;
 *
 **************************************************************/
 
-import "./usingOraclize.sol";
+import "./usingOraclize.sol"; // For testing on a local node
 //import "github.com/oraclize/ethereum-api/oraclizeAPI.sol";
 
 interface token
