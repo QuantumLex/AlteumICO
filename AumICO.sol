@@ -8,7 +8,6 @@ pragma solidity ^0.4.18;
 *
 **************************************************************/
 
-//import "github.com/oraclize/ethereum-api/usingOraclize.sol";
 import "./usingOraclize.sol";
 //import "github.com/oraclize/ethereum-api/oraclizeAPI.sol";
 
@@ -111,6 +110,7 @@ contract AumICO is usingOraclize, SafeMath {
 		tokenReward = token(tokenContractAddress);
 		currentOperation = 0;
 		hasICOFinished = false;
+		//lastPriceCheck = 0;
 		lastPriceCheck = now; // testing
 	}
 	
