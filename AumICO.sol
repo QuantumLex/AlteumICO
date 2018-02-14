@@ -23,6 +23,12 @@ interface token
 */
 contract SafeMath
 {
+    function safeAdd(uint256 a, uint256 b) internal pure returns (uint256) {
+        uint256 c = a + b;
+        assert(c >= a);
+        return c;
+      }
+    
 	function safeSub(uint256 a, uint256 b) internal pure returns (uint256) {
 		assert(b <= a);
 		return a - b;
@@ -57,6 +63,14 @@ contract AumICO is usingOraclize, SafeMath {
 		bool closed;
 	}
 	
+	struct Contact
+	{
+		uint obtainedTokens;
+		uint depositedEther;
+		bool isOnWhitelist;
+		bool userExists;
+	}
+	
 	uint[3] public tokenPrice;
 	uint[3] public availableTokens;
 	uint public tokenCurrentStage;
@@ -79,7 +93,8 @@ contract AumICO is usingOraclize, SafeMath {
 	
 	address tokenContractAddress;
 	address admin;
-	mapping(address => bool) whitelist;
+	mapping(address => Contact) public allContacts;
+	address[] public contactsAddresses;
 	
 	token public tokenReward;
 	
@@ -121,16 +136,37 @@ contract AumICO is usingOraclize, SafeMath {
 	}
 	
 	function () payable {
-		if(!whitelist[msg.sender] || now < startEpochTimestamp || now >= endEpochTimestamp || hasICOFinished)
+		if(!allContacts[msg.sender].isOnWhitelist || now < startEpochTimestamp || now >= endEpochTimestamp || hasICOFinished)
 		{
 			revert();
 		}
         uint depositedEther = msg.value;
         uint currentVaultBalance = tokenReward.getBalance(this);
-		if(depositedEther < minAmmountToInvest || depositedEther > maxAmmountToInvest)
+        uint totalAddressDeposit = safeAdd(allContacts[msg.sender].depositedEther, depositedEther);
+        uint leftoverEther = 0;
+		if(depositedEther < minAmmountToInvest || totalAddressDeposit > maxAmmountToInvest)
 		{
-			revert();
-		}else if (currentVaultBalance > 0)
+			bool canEtherPassthrough = false;
+		    if(totalAddressDeposit > maxAmmountToInvest)
+		    {
+		        uint passthroughEther = safeSub(maxAmmountToInvest, allContacts[msg.sender].depositedEther);   
+		        if(passthroughEther > 0)
+		        {
+		            depositedEther = safeSub(depositedEther, 100000);   //Gas for the extra transactions
+		            if(depositedEther > passthroughEther)
+		            {
+		                leftoverEther = safeSub(depositedEther, passthroughEther);   
+		            }
+		            depositedEther = passthroughEther;
+		            canEtherPassthrough = true;
+		        }
+		    }
+		    if(!canEtherPassthrough)
+		    {
+		        revert();    
+		    }
+		}
+		if (currentVaultBalance > 0)
 		{
 			if(safeSub(now, lastPriceCheck) > 300)
 			{
@@ -144,6 +180,10 @@ contract AumICO is usingOraclize, SafeMath {
 		{
 			revert();
 		}
+		if(leftoverEther > 0)
+		{
+		    msg.sender.transfer(leftoverEther);
+		}
     }
     
 	function sendTokens(address receiver, uint depositedEther) private 
@@ -151,7 +191,7 @@ contract AumICO is usingOraclize, SafeMath {
 		if(tokenCurrentStage >= 3)
 		{
 			hasICOFinished = true;
-			receiver.transfer(depositedEther);
+			//receiver.transfer(depositedEther);
 		}else
 		{
 		    
@@ -161,24 +201,31 @@ contract AumICO is usingOraclize, SafeMath {
 			
 			if(obtainedTokens > availableTokens[tokenCurrentStage])
 			{
+			    uint leftoverEther = depositedEther;
 				if(availableTokens[tokenCurrentStage] > 0)
 				{
+				    uint tokensAvailableForTransfer = availableTokens[tokenCurrentStage];
+				    uint leftoverTokens = safeSub(obtainedTokens, availableTokens[tokenCurrentStage]);
+    				availableTokens[tokenCurrentStage] = 0;
+    				uint leftoverEtherDividend = safeMul(leftoverTokens, tokenPrice[tokenCurrentStage] );
+    				leftoverEtherDividend = safeMul(leftoverEtherDividend, 10**10 );
+    				leftoverEther = safeDiv(leftoverEtherDividend, etherPrice);
+    				
+				    uint usedEther = safeSub(depositedEther, leftoverEther);
 					etherInContract += depositedEther;
-					tokenReward.sendCoin(receiver, availableTokens[tokenCurrentStage]);
+					allContacts[receiver].obtainedTokens += tokensAvailableForTransfer;
+			        allContacts[receiver].depositedEther += usedEther;
+					//tokenReward.sendCoin(receiver, tokensAvailableForTransfer);
 				}
-				
-				uint leftoverTokens = safeSub(obtainedTokens, availableTokens[tokenCurrentStage]);
-				availableTokens[tokenCurrentStage] = 0;
-				uint leftoverEtherDividend = safeMul(leftoverTokens, tokenPrice[tokenCurrentStage] );
-				leftoverEtherDividend = safeMul(leftoverEtherDividend, 10**10 );
-				uint leftoverEther = safeDiv(leftoverEtherDividend, etherPrice);
 				tokenCurrentStage++;
 				sendTokens(receiver, leftoverEther);
 			}else
 			{
 				availableTokens[tokenCurrentStage] = safeSub(availableTokens[tokenCurrentStage], obtainedTokens);
 				etherInContract += depositedEther;
-				tokenReward.sendCoin(receiver, obtainedTokens);
+				allContacts[receiver].obtainedTokens += obtainedTokens;
+			    allContacts[receiver].depositedEther += depositedEther;
+				//tokenReward.sendCoin(receiver, obtainedTokens);
 			}
 		}
 	}
@@ -229,17 +276,27 @@ contract AumICO is usingOraclize, SafeMath {
 	
 	function AddToWhitelist(address addressToAdd) onlyAdmin public
 	{
-		whitelist[addressToAdd] = true;
+		if(!allContacts[addressToAdd].userExists)
+		{
+			contactsAddresses.push(addressToAdd);
+			allContacts[addressToAdd].userExists = true;
+			allContacts[addressToAdd].obtainedTokens = 0;
+			allContacts[addressToAdd].depositedEther = 0;
+		}
+		allContacts[addressToAdd].isOnWhitelist = true;
 	}
 	
 	function RemoveFromWhitelist(address addressToRemove) onlyAdmin public
 	{
-		whitelist[addressToRemove] = false;
+	    if(allContacts[addressToRemove].userExists)
+		{
+			allContacts[addressToRemove].isOnWhitelist = false;
+		}
 	}
 	
 	function IsOnWhitelist(address addressToCheck) public view returns(bool isOnWhitelist)
 	{
-		return whitelist[addressToCheck];
+		return allContacts[addressToCheck].isOnWhitelist;
 	}
 	
 	
