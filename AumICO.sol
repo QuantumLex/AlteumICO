@@ -69,6 +69,7 @@ contract AumICO is usingOraclize, SafeMath {
 		uint depositedEther;
 		bool isOnWhitelist;
 		bool userExists;
+		bool userLiquidated;
 	}
 	
 	uint[3] public tokenPrice;
@@ -78,6 +79,8 @@ contract AumICO is usingOraclize, SafeMath {
 	
 	uint public etherPrice; //Price x100 (with no cents: $800.55 => 80055)
 	uint public etherInContract;
+	uint public usdEstimateInContract; //With no cents and x10**8 (1usd => 10000000000)
+	uint public softCap = 35437500000000000; //15% of goal $3,543,750 With no cents and x10**8 (1usd => 10000000000)
 	
 	uint public startEpochTimestamp = 1518487231; // Testing
 	//uint public startEpochTimestamp = 1518807600; // Friday February 16th 2018 at 12pm GMT-06:00, you can verify the epoch at https://www.epochconverter.com/
@@ -113,6 +116,7 @@ contract AumICO is usingOraclize, SafeMath {
 	    admin = msg.sender;
 		etherPrice = 80055; // testing
 		etherInContract = 0;
+		usdEstimateInContract = 19687500000000000; //$1,968,750 in pre-sale
 		tokenPrice[0] = 35;//uint public tokenPricePreSale = 35; //Price x100 (with no cents: $0.35 => 35)
 		tokenPrice[1] = 55;//uint public tokenPricePreICO = 55; //Price x100 (with no cents: $0.55 => 55)
 		tokenPrice[2] = 75;//uint public tokenPriceICO = 75; //Price x100 (with no cents: $0.75 => 75)
@@ -125,8 +129,8 @@ contract AumICO is usingOraclize, SafeMath {
 		tokenReward = token(tokenContractAddress);
 		currentOperation = 0;
 		hasICOFinished = false;
-		//lastPriceCheck = 0;
-		lastPriceCheck = now; // testing
+		lastPriceCheck = 0;
+		//lastPriceCheck = now; // testing
 	}
 	
 	function changeTokenAddress (address newTokenAddress) public onlyAdmin
@@ -191,7 +195,7 @@ contract AumICO is usingOraclize, SafeMath {
 		if(tokenCurrentStage >= 3)
 		{
 			hasICOFinished = true;
-			//receiver.transfer(depositedEther);
+			receiver.transfer(depositedEther);
 		}else
 		{
 		    
@@ -215,22 +219,24 @@ contract AumICO is usingOraclize, SafeMath {
 					etherInContract += depositedEther;
 					allContacts[receiver].obtainedTokens += tokensAvailableForTransfer;
 			        allContacts[receiver].depositedEther += usedEther;
-					//tokenReward.sendCoin(receiver, tokensAvailableForTransfer);
+			        usdEstimateInContract += safeMul(tokensAvailableForTransfer, tokenPrice[tokenCurrentStage] );
+					tokenReward.sendCoin(receiver, tokensAvailableForTransfer);
 				}
 				tokenCurrentStage++;
 				sendTokens(receiver, leftoverEther);
 			}else
 			{
+			    usdEstimateInContract += safeMul(obtainedTokens, tokenPrice[tokenCurrentStage] );
 				availableTokens[tokenCurrentStage] = safeSub(availableTokens[tokenCurrentStage], obtainedTokens);
 				etherInContract += depositedEther;
 				allContacts[receiver].obtainedTokens += obtainedTokens;
 			    allContacts[receiver].depositedEther += depositedEther;
-				//tokenReward.sendCoin(receiver, obtainedTokens);
+				tokenReward.sendCoin(receiver, obtainedTokens);
 			}
 		}
 	}
 	
-	function CheckQueue() private
+	function CheckQueue() public
 	{
 	    if(operationsInQueue.length > currentOperation)
 	    {
@@ -274,6 +280,22 @@ contract AumICO is usingOraclize, SafeMath {
 		CheckQueue();
 	}
 	
+	function CheckSoftCap() onlyAdmin public
+	{
+	    if(usdEstimateInContract < softCap && now > endEpochTimestamp)
+	    {
+	        for(uint i = 0; i < contactsAddresses.length;i++)
+	        {
+	            if(!allContacts[contactsAddresses[i]].userLiquidated)
+	            {
+	                allContacts[contactsAddresses[i]].userLiquidated = true;
+	                allContacts[contactsAddresses[i]].depositedEther = 0;
+	                contactsAddresses[i].transfer(allContacts[contactsAddresses[i]].depositedEther);
+	            }
+	        }
+	    }
+	}
+	
 	function AddToWhitelist(address addressToAdd) onlyAdmin public
 	{
 		if(!allContacts[addressToAdd].userExists)
@@ -304,7 +326,7 @@ contract AumICO is usingOraclize, SafeMath {
 		return etherPrice;
 	}
 	
-	function updatePrice() public 
+	function updatePrice() private
 	{
 		if (oraclize_getPrice("URL") > this.balance) {
             //LogNewOraclizeQuery("Oraclize query was NOT sent, please add some ETH to cover for the query fee");
