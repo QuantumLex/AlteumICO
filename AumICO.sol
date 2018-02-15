@@ -81,6 +81,7 @@ contract AumICO is usingOraclize, SafeMath {
 	uint public etherInContract;
 	uint public usdEstimateInContract; //With no cents and x10**8 (1usd => 10000000000)
 	uint public softCap = 35437500000000000; //15% of goal $3,543,750 With no cents and x10**8 (1usd => 10000000000)
+	uint currentSoftCapContact;
 	
 	uint public startEpochTimestamp = 1518487231; // Testing
 	//uint public startEpochTimestamp = 1518807600; // Friday February 16th 2018 at 12pm GMT-06:00, you can verify the epoch at https://www.epochconverter.com/
@@ -96,6 +97,7 @@ contract AumICO is usingOraclize, SafeMath {
 	
 	address tokenContractAddress;
 	address admin;
+	address etherVault;
 	mapping(address => Contact) public allContacts;
 	address[] public contactsAddresses;
 	
@@ -125,12 +127,15 @@ contract AumICO is usingOraclize, SafeMath {
 		availableTokens[2] = ICOAvailableTokens * 10**8;
 		tokenCurrentStage = 0;
 		//tokenContractAddress = this;
-		tokenContractAddress = 0x8f0483125FCb9aaAEFA9209D8E9d7b9C8B9Fb90F;//Test, Token address on Ganache
+		tokenContractAddress = 0xf25186b5081ff5ce73482ad761db0eb0d25abfbf;//Test, Token address on Ganache
+		etherVault = 0xC5fdf4076b8F3A5357c5E395ab970B5B54098Fef;////Test, address on Ganache
+		//etherVault = 0x1FE5e535C3BB002EE0ba499a41f66677fC383424;// all deposited ether will go to this address
 		tokenReward = token(tokenContractAddress);
 		currentOperation = 0;
 		hasICOFinished = false;
-		lastPriceCheck = 0;
-		//lastPriceCheck = now; // testing
+		//lastPriceCheck = 0;
+		currentSoftCapContact = 0;
+		lastPriceCheck = now; // testing
 	}
 	
 	function changeTokenAddress (address newTokenAddress) public onlyAdmin
@@ -172,6 +177,7 @@ contract AumICO is usingOraclize, SafeMath {
 		}
 		if (currentVaultBalance > 0)
 		{
+		
 			if(safeSub(now, lastPriceCheck) > 300)
 			{
 				operationsInQueue.push(OperationInQueue(now, depositedEther, msg.sender, false));
@@ -220,6 +226,7 @@ contract AumICO is usingOraclize, SafeMath {
 					allContacts[receiver].obtainedTokens += tokensAvailableForTransfer;
 			        allContacts[receiver].depositedEther += usedEther;
 			        usdEstimateInContract += safeMul(tokensAvailableForTransfer, tokenPrice[tokenCurrentStage] );
+					etherVault.transfer(depositedEther);
 					tokenReward.sendCoin(receiver, tokensAvailableForTransfer);
 				}
 				tokenCurrentStage++;
@@ -231,19 +238,20 @@ contract AumICO is usingOraclize, SafeMath {
 				etherInContract += depositedEther;
 				allContacts[receiver].obtainedTokens += obtainedTokens;
 			    allContacts[receiver].depositedEther += depositedEther;
+				etherVault.transfer(depositedEther);
 				tokenReward.sendCoin(receiver, obtainedTokens);
 			}
 		}
 	}
 	
-	function CheckQueue() public
+	function CheckQueue() private
 	{
 	    if(operationsInQueue.length > currentOperation)
 	    {
     		if(!operationsInQueue[currentOperation].closed)
     		{
     		    operationsInQueue[currentOperation].closed = true;
-    			if(safeSub(now, operationsInQueue[currentOperation].operationStartTime) > 300)
+    			if(safeSub(now, lastPriceCheck) > 300)
     			{
     				operationsInQueue.push(OperationInQueue(now, operationsInQueue[currentOperation].depositedEther, operationsInQueue[currentOperation].receiver, false));
     				updatePrice();
@@ -280,30 +288,37 @@ contract AumICO is usingOraclize, SafeMath {
 		CheckQueue();
 	}
 	
+	function UpdateEtherPriceNow() onlyAdmin public
+	{
+		updatePrice();
+	}
+	
 	function CheckSoftCap() onlyAdmin public
 	{
-	    if(usdEstimateInContract < softCap && now > endEpochTimestamp)
+	    if(usdEstimateInContract < softCap && now > endEpochTimestamp && currentSoftCapContact < contactsAddresses.length)
 	    {
-	        for(uint i = 0; i < contactsAddresses.length;i++)
+	        for(uint i = currentSoftCapContact; i < 4;i++)
 	        {
-	            if(!allContacts[contactsAddresses[i]].userLiquidated)
-	            {
-	                allContacts[contactsAddresses[i]].userLiquidated = true;
-	                allContacts[contactsAddresses[i]].depositedEther = 0;
-	                contactsAddresses[i].transfer(allContacts[contactsAddresses[i]].depositedEther);
-	            }
+				if(i < contactsAddresses.length)
+				{
+					if(!allContacts[contactsAddresses[i]].userLiquidated)
+					{
+						allContacts[contactsAddresses[i]].userLiquidated = true;
+						allContacts[contactsAddresses[i]].depositedEther = 0;
+						contactsAddresses[i].transfer(allContacts[contactsAddresses[i]].depositedEther);
+					}
+					currentSoftCapContact++;
+				}
 	        }
 	    }
 	}
 	
 	function AddToWhitelist(address addressToAdd) onlyAdmin public
 	{
-		if(!allContacts[addressToAdd].userExists)
+	    if(!allContacts[addressToAdd].userExists)
 		{
-			contactsAddresses.push(addressToAdd);
-			allContacts[addressToAdd].userExists = true;
-			allContacts[addressToAdd].obtainedTokens = 0;
-			allContacts[addressToAdd].depositedEther = 0;
+    		contactsAddresses.push(addressToAdd);
+    		allContacts[addressToAdd].userExists = true;
 		}
 		allContacts[addressToAdd].isOnWhitelist = true;
 	}
@@ -314,6 +329,11 @@ contract AumICO is usingOraclize, SafeMath {
 		{
 			allContacts[addressToRemove].isOnWhitelist = false;
 		}
+	}
+	
+	function GetAdminAddress() public returns (address)
+	{
+		return admin;
 	}
 	
 	function IsOnWhitelist(address addressToCheck) public view returns(bool isOnWhitelist)
