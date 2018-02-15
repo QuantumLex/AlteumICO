@@ -98,6 +98,7 @@ contract AumICO is usingOraclize, SafeMath {
 	address tokenContractAddress;
 	address admin;
 	address etherVault;
+	address etherGasProvider;
 	mapping(address => Contact) public allContacts;
 	address[] public contactsAddresses;
 	
@@ -115,6 +116,7 @@ contract AumICO is usingOraclize, SafeMath {
 	event Transfer(address indexed _from, address indexed _to, uint256 _value);
 
 	function AumICO() public {
+		OAR = OraclizeAddrResolverI(0x6f485C8BF6fc43eA212E93BBF8ce046C7f1cb475); //Testing
 	    admin = msg.sender;
 		etherPrice = 80055; // testing
 		etherInContract = 0;
@@ -129,22 +131,22 @@ contract AumICO is usingOraclize, SafeMath {
 		//tokenContractAddress = this;
 		tokenContractAddress = 0xf25186b5081ff5ce73482ad761db0eb0d25abfbf;//Test, Token address on Ganache
 		etherVault = 0xC5fdf4076b8F3A5357c5E395ab970B5B54098Fef;////Test, address on Ganache
+		etherGasProvider = 0xC5fdf4076b8F3A5357c5E395ab970B5B54098Fef;////Test, address on Ganache
 		//etherVault = 0x1FE5e535C3BB002EE0ba499a41f66677fC383424;// all deposited ether will go to this address
+		//etherGasProvider = 0x1FE5e535C3BB002EE0ba499a41f66677fC383424;// all deposited ether will go to this address
 		tokenReward = token(tokenContractAddress);
 		currentOperation = 0;
 		hasICOFinished = false;
-		//lastPriceCheck = 0;
+		lastPriceCheck = 0;
 		currentSoftCapContact = 0;
-		lastPriceCheck = now; // testing
-	}
-	
-	function changeTokenAddress (address newTokenAddress) public onlyAdmin
-	{
-		tokenContractAddress = newTokenAddress;
-		tokenReward = token(tokenContractAddress);
+		//lastPriceCheck = now; // testing
 	}
 	
 	function () payable {
+		if(msg.sender == etherGasProvider)
+		{
+			return;
+		}
 		if(!allContacts[msg.sender].isOnWhitelist || now < startEpochTimestamp || now >= endEpochTimestamp || hasICOFinished)
 		{
 			revert();
@@ -204,11 +206,9 @@ contract AumICO is usingOraclize, SafeMath {
 			receiver.transfer(depositedEther);
 		}else
 		{
-		    
 			uint obtainedTokensDividend = safeMul(etherPrice, depositedEther );
 			uint obtainedTokensDivisor = safeMul(tokenPrice[tokenCurrentStage], 10**10 );
 			uint obtainedTokens = safeDiv(obtainedTokensDividend, obtainedTokensDivisor);
-			
 			if(obtainedTokens > availableTokens[tokenCurrentStage])
 			{
 			    uint leftoverEther = depositedEther;
@@ -279,8 +279,19 @@ contract AumICO is usingOraclize, SafeMath {
 		return etherInContract;
 	}
 	
-	function GetQueueLength() public constant returns (uint) {
+	function GetQueueLength() public onlyAdmin constant returns (uint) {
 		return safeSub(operationsInQueue.length, currentOperation);
+	}
+	
+	function changeTokenAddress (address newTokenAddress) public onlyAdmin
+	{
+		tokenContractAddress = newTokenAddress;
+		tokenReward = token(tokenContractAddress);
+	}
+	
+	function ChangeEtherGasProvider(address newEtherGasProvider) onlyAdmin public
+	{
+		etherGasProvider = newEtherGasProvider;
 	}
 	
 	function AdvanceQueue() onlyAdmin public
@@ -341,7 +352,6 @@ contract AumICO is usingOraclize, SafeMath {
 		return allContacts[addressToCheck].isOnWhitelist;
 	}
 	
-	
 	function getPrice() public constant returns (uint) {
 		return etherPrice;
 	}
@@ -352,7 +362,7 @@ contract AumICO is usingOraclize, SafeMath {
             //LogNewOraclizeQuery("Oraclize query was NOT sent, please add some ETH to cover for the query fee");
         } else {
             //LogNewOraclizeQuery("Oraclize query was sent, standing by for the answer..");
-            oraclize_query("URL", "json(https://min-api.cryptocompare.com/data/price?fsym=ETH&tsyms=USD).USD");
+            oraclize_query("URL", "json(https://min-api.cryptocompare.com/data/price?fsym=ETH&tsyms=USD).USD", 300000);
         }
 	}
 	
