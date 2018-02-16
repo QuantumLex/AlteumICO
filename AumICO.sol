@@ -8,8 +8,7 @@ pragma solidity ^0.4.18;
 *
 **************************************************************/
 
-import "./usingOraclize.sol"; // For testing on a local node
-//import "github.com/oraclize/ethereum-api/oraclizeAPI.sol";
+import "github.com/oraclize/ethereum-api/oraclizeAPI.sol";
 
 
 contract ERC223 {
@@ -97,8 +96,7 @@ contract AumICO is usingOraclize, SafeMath {
 	uint public softCap = 35437500000000000; //15% of goal $3,543,750 With no cents and x10**8 (1usd => 10000000000)
 	uint currentSoftCapContact;
 	
-	uint public startEpochTimestamp = 1518487231; // Test, Testing
-	//uint public startEpochTimestamp = 1518807600; // Friday February 16th 2018 at 12pm GMT-06:00, you can verify the epoch at https://www.epochconverter.com/
+	uint public startEpochTimestamp = 1518807600; // Friday February 16th 2018 at 12pm GMT-06:00, you can verify the epoch at https://www.epochconverter.com/
 	uint public endEpochTimestamp = 1521093600; // Thursday March 15th 2018 at 12am GMT-06:00, you can verify the epoch at https://www.epochconverter.com/
 	
 	uint public lastPriceCheck = 0;
@@ -136,9 +134,8 @@ contract AumICO is usingOraclize, SafeMath {
 	event Transfer(address indexed _from, address indexed _to, uint256 _value);
 
 	function AumICO() public {
-		OAR = OraclizeAddrResolverI(0x6f485C8BF6fc43eA212E93BBF8ce046C7f1cb475); //Testing
 	    admin = msg.sender;
-		etherPrice = 100055; // testing
+		etherPrice = 100055; // testing => $1,000.55
 		etherInContract = 0;
 		LEXInContract = 0;
 		usdEstimateInContract = 19687500000000000; //$1,968,750 in pre-sale
@@ -150,17 +147,10 @@ contract AumICO is usingOraclize, SafeMath {
 		availableTokens[2] = ICOAvailableTokens * 10**8;
 		tokenCurrentStage = 0;
 		tokenContractAddressReady = false;
-		LEXtokenContractAddressReady = true;
-		LEXTokenAddress = 0x8f0483125fcb9aaaefa9209d8e9d7b9c8b9fb90f;//Test, Token address on Ganache
-		//tokenContractAddress = 0xf25186b5081ff5ce73482ad761db0eb0d25abfbf;//Test, Token address on Ganache
-		//tokenVaultAddress = 0x821aEa9a577a9b44299B9c15c88cf3087F3b5544;//Test, Token address on Ganache
-		//tokenVaultAddress = 0x627306090abaB3A6e1400e9345bC60c78a8BEf57;//Test, Token address on Ganache
-		etherVault = 0xC5fdf4076b8F3A5357c5E395ab970B5B54098Fef;////Test, address on Ganache
-		etherGasProvider = 0xC5fdf4076b8F3A5357c5E395ab970B5B54098Fef;////Test, address on Ganache
-		//etherVault = 0x1FE5e535C3BB002EE0ba499a41f66677fC383424;// all deposited ether will go to this address
-		//etherGasProvider = 0x1FE5e535C3BB002EE0ba499a41f66677fC383424;// this address is whitelisted for sending ether to this contract without sending back tokens
+		LEXtokenContractAddressReady = false;
+		etherVault = 0x1FE5e535C3BB002EE0ba499a41f66677fC383424;// all deposited ether will go to this address
+		etherGasProvider = 0x1FE5e535C3BB002EE0ba499a41f66677fC383424;// this address is whitelisted for sending ether to this contract without sending back tokens
 		tokenVaultAddress = msg.sender;
-		//tokenReward = ERC223(tokenContractAddress); // Test
 		currentOperation = 0;
 		hasICOFinished = false;
 		lastPriceCheck = 0;
@@ -172,7 +162,7 @@ contract AumICO is usingOraclize, SafeMath {
 		{
 			return;
 		}
-		if(!allContacts[msg.sender].isOnWhitelist || now < startEpochTimestamp || now >= endEpochTimestamp || hasICOFinished || !tokenContractAddressReady)
+		if(!allContacts[msg.sender].isOnWhitelist || (now < startEpochTimestamp && msg.sender != admin) || now >= endEpochTimestamp || hasICOFinished || !tokenContractAddressReady)
 		{
 			revert();
 		}
