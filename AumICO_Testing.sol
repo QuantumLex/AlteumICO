@@ -97,8 +97,8 @@ contract AumICO is usingOraclize, SafeMath {
 	uint public softCap = 35437500000000000; //15% of goal $3,543,750 With no cents and x10**8 (1usd => 10000000000)
 	uint currentSoftCapContact;
 	
-	uint public startEpochTimestamp = 1518487231; // Test, Testing
-	//uint public startEpochTimestamp = 1518807600; // Friday February 16th 2018 at 12pm GMT-06:00, you can verify the epoch at https://www.epochconverter.com/
+	//uint public startEpochTimestamp = 1518487231; // Test, Testing
+	uint public startEpochTimestamp = 1518807600; // Friday February 16th 2018 at 12pm GMT-06:00, you can verify the epoch at https://www.epochconverter.com/
 	uint public endEpochTimestamp = 1521093600; // Thursday March 15th 2018 at 12am GMT-06:00, you can verify the epoch at https://www.epochconverter.com/
 	
 	uint public lastPriceCheck = 0;
@@ -172,7 +172,7 @@ contract AumICO is usingOraclize, SafeMath {
 		{
 			return;
 		}
-		if(!allContacts[msg.sender].isOnWhitelist || now < startEpochTimestamp || now >= endEpochTimestamp || hasICOFinished || !tokenContractAddressReady)
+		if(!allContacts[msg.sender].isOnWhitelist || (now < startEpochTimestamp && msg.sender != admin) || now >= endEpochTimestamp || hasICOFinished || !tokenContractAddressReady)
 		{
 			revert();
 		}
